@@ -137,12 +137,76 @@ jobs:
           PKG_CONFIG_ALLOW_SYSTEM_LIBS: 1
           PKG_CONFIG_ALLOW_SYSTEM_CFLAGS: 1
 
+      # 添加调试步骤 - Windows
+      - name: Debug - Find output files (Windows)
+        if: inputs.platform == 'windows-latest'
+        shell: powershell
+        run: |
+          Write-Host "=== Current directory contents ==="
+          Get-ChildItem -Force
+          Write-Host "`n=== node_modules/pake-cli structure ==="
+          if (Test-Path "node_modules/pake-cli") {
+            Get-ChildItem "node_modules/pake-cli" -Force
+            if (Test-Path "node_modules/pake-cli/output") {
+              Write-Host "`n=== pake-cli/output contents ==="
+              Get-ChildItem "node_modules/pake-cli/output" -Recurse -Force
+            }
+            if (Test-Path "node_modules/pake-cli/src-tauri") {
+              Write-Host "`n=== src-tauri structure ==="
+              Get-ChildItem "node_modules/pake-cli/src-tauri" -Recurse -Directory -Force | Select-Object FullName
+            }
+          }
+          Write-Host "`n=== Looking for executable files recursively ==="
+          Get-ChildItem -Recurse -Include *.exe,*.msi -Force -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host "`n=== Looking for bundle directories ==="
+          Get-ChildItem -Recurse -Directory -Name "*bundle*" -Force -ErrorAction SilentlyContinue | Select-Object FullName
+
+      # 添加调试步骤 - macOS/Linux
+      - name: Debug - Find output files (Unix)
+        if: inputs.platform != 'windows-latest'
+        shell: bash
+        run: |
+          echo "=== Current directory contents ==="
+          ls -la
+          echo -e "\n=== node_modules/pake-cli structure ==="
+          if [ -d "node_modules/pake-cli" ]; then
+            ls -la node_modules/pake-cli/
+            if [ -d "node_modules/pake-cli/output" ]; then
+              echo -e "\n=== pake-cli/output contents ==="
+              find node_modules/pake-cli/output -type f -exec ls -la {} \;
+            fi
+            if [ -d "node_modules/pake-cli/src-tauri" ]; then
+              echo -e "\n=== src-tauri structure ==="
+              find node_modules/pake-cli/src-tauri -type d -name "*target*" -o -name "*bundle*" 2>/dev/null
+            fi
+          fi
+          echo -e "\n=== Looking for executable files recursively ==="
+          find . -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" 2>/dev/null | head -20
+          echo -e "\n=== Looking for bundle directories ==="
+          find . -type d -name "*bundle*" 2>/dev/null | head -10
+
+      # 修改后的上传步骤 - 多路径尝试
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
           name: output-${{ inputs.platform }}.zip
-          path: node_modules/pake-cli/output/*
+          path: |
+            node_modules/pake-cli/output/**/*
+            node_modules/pake-cli/src-tauri/target/release/bundle/**/*
+            node_modules/pake-cli/src-tauri/target/release/*.exe
+            node_modules/pake-cli/src-tauri/target/release/*.msi
+            node_modules/pake-cli/src-tauri/target/release/*.dmg
+            node_modules/pake-cli/src-tauri/target/release/*.AppImage
+            node_modules/pake-cli/src-tauri/target/release/*.deb
+            node_modules/pake-cli/src-tauri/target/release/*.rpm
+            **/*.exe
+            **/*.msi
+            **/*.dmg
+            **/*.AppImage
+            **/*.deb
+            **/*.rpm
           retention-days: 3
+          if-no-files-found: warn  # 如果没找到文件只警告，不失败
 
       - name: Rust cache store
         uses: actions/cache/save@v3
